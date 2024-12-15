@@ -36,6 +36,13 @@ fn dfs<'a>(
                     }
                 }
 
+                if remaining_word.len() >= 3 {
+                    let three_char_prefix = remaining_word[..3].to_string();
+                    if rules.contains_key(&three_char_prefix) {
+                        prefix = three_char_prefix;
+                    }
+                }
+
                 if let Some(productions) = rules.get(&prefix) {
                     for production in productions {
                         let mut current_remaining = remaining_word;
