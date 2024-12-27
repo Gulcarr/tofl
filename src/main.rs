@@ -392,9 +392,9 @@ D->d";*/
             break;
         }
 
-        match parse_word(input.trim(), &Symbol::NonTerminal("S".to_string()), &table) {
-            Some(res) => println!("{:?}", res),
-            _ => println!("Doesn't belong to the language"),
+        match parse_word(input.trim(), &table) {
+            true => println!("Belongs"),
+            false => println!("Doesn't belong to the language"),
         }
     }
 

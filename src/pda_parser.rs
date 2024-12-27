@@ -1,92 +1,71 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use crate::rules_parser::Symbol;
 
-fn dfs<'a>(
-    remaining_word: &'a str,
-    current_symbol: &Symbol,
-    table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
-    path: &mut Vec<Vec<Symbol>>,
-    depth: usize
-) -> Option<&'a str> {
-    if depth > 100 {
-        return None;
-    }
 
-    if remaining_word.is_empty() {
-        return None;
-    }
-
-    match current_symbol {
-        Symbol::Terminal(c) => {
-            if remaining_word.chars().next() == Some(*c) {
-                Some(&remaining_word[1..])
-            } else {
-                None
-            }
-        }
-        Symbol::NonTerminal(_) => {
-            if let Some(rules) = table.get(current_symbol) {
-                let first_char = remaining_word.chars().next().unwrap();
-                let mut prefix = first_char.to_string();
-
-                if remaining_word.len() >= 2 {
-                    let two_char_prefix = remaining_word[..2].to_string();
-                    if rules.contains_key(&two_char_prefix) {
-                        prefix = two_char_prefix;
-                    }
-                }
-
-                if remaining_word.len() >= 3 {
-                    let three_char_prefix = remaining_word[..3].to_string();
-                    if rules.contains_key(&three_char_prefix) {
-                        prefix = three_char_prefix;
-                    }
-                }
-
-                if let Some(productions) = rules.get(&prefix) {
-                    for production in productions {
-                        let mut current_remaining = remaining_word;
-                        let mut production_path = Vec::new();
-                        let mut success = true;
-
-                        for symbol in production {
-                            if let Some(new_remaining) = dfs(current_remaining, symbol, table, &mut production_path, depth + 1) {
-                                current_remaining = new_remaining;
-                            } else {
-                                success = false;
-                                break;
-                            }
-                        }
-
-                        if success {
-                            path.extend(production_path);
-                            path.push(production.clone());
-                            return Some(current_remaining);
-                        }
-                    }
-                }
-            }
-            None
-        }
-    }
+#[derive(Debug)]
+struct ParseNode {
+    symbols: Vec<Symbol>,
+    matched: String,
+    remaining: String,
 }
 
-pub fn parse_word(
-    word: &str,
-    start_symbol: &Symbol,
-    table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>
-) -> Option<Vec<Vec<Symbol>>> {
+pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
+    let start_symbol = Symbol::NonTerminal("S".to_string());
+    let mut queue = VecDeque::new();
+    let mut visited = HashSet::new();
 
+     queue.push_back(ParseNode {
+         symbols: vec![start_symbol],
+         matched: String::new(),
+         remaining: word.to_string(),
+     });
 
-    let mut derivation = Vec::new();
-    if let Some(remaining) = dfs(word, start_symbol, table, &mut derivation, 0) {
-        if remaining.is_empty() {
-            derivation.reverse();
-            Some(derivation)
-        } else {
-            None
+    while let Some(node) = queue.pop_front() {
+        let state_key = (node.symbols.clone(), node.matched.clone(), node.remaining.clone());
+        if visited.contains(&state_key) {
+            continue;
         }
-    } else {
-        None
+        visited.insert(state_key);
+
+        if node.symbols.is_empty() && node.remaining.is_empty() {
+            return true;
+        }
+
+        if node.symbols.is_empty() {
+            continue;
+        }
+
+        match &node.symbols[0] {
+            Symbol::Terminal(c) => {
+                if let Some(next_char) = node.remaining.chars().next() {
+                    if *c == next_char {
+                        queue.push_back(ParseNode {
+                            symbols: node.symbols[1..].to_vec(),
+                            matched: format!("{}{}", node.matched, next_char),
+                            remaining: node.remaining[1..].to_string(),
+                        });
+                    }
+                }
+            }
+            Symbol::NonTerminal(nt) => {
+                if let Some(rules) = grammar.get(&Symbol::NonTerminal(nt.clone())) {
+                    for (prefix, productions) in rules {
+                        if prefix.is_empty() || node.remaining.starts_with(prefix) {
+                            for production in productions {
+                                let mut new_symbols = production.clone();
+                                new_symbols.extend_from_slice(&node.symbols[1..]);
+
+                                queue.push_back(ParseNode {
+                                    symbols: new_symbols,
+                                    matched: node.matched.clone(),
+                                    remaining: node.remaining.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+    false
 }
