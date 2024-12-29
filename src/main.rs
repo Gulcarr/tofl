@@ -95,8 +95,12 @@ pub fn find_k_chars(
     mut visited: HashSet<Symbol>,
 ) -> HashSet<char> {
     let mut result = HashSet::new();
+    if production.is_empty() {
+        result.insert('\0');
+        return result;
+    }
 
-    if k == 0 || production.is_empty() {
+    if k == 0 {
         return result;
     }
 
@@ -104,7 +108,7 @@ pub fn find_k_chars(
         Symbol::Terminal(c) => {
             if k == 1 {
                 result.insert(*c);
-            } else if production.len() > 1 {
+            } else {
                 result.extend(find_k_chars(
                     k - 1,
                     &production[1..],
@@ -334,6 +338,18 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     result
 }
 
+fn check_k (table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
+    for (_, rules) in table {
+        for (_, productions) in rules {
+            if productions.len() > 1 {
+                return false
+            }
+        }
+    }
+
+    true
+}
+
 fn main() -> Result<(),String> {
     let mut input = String::new();
     io::stdin().read_line(&mut input).expect("can't read a k");
@@ -351,7 +367,14 @@ fn main() -> Result<(),String> {
     file.read_to_string(&mut grammar_text)
         .map_err(|e| format!("Failed to read input file grammar_description: {}", e))?;
 
-   /*let grammar_text = "S-> aB\nS-> aC\nS-> bE\nS-> bD\nB->bK\nB->F\nF->pp\nC->bL
+   /*let grammar_text = "S-> aB
+S-> aC
+S-> bE
+S-> bD
+B->bK
+B->F
+F->pp
+C->bL
 K->k
 K->t
 L->l
@@ -374,6 +397,11 @@ D->d";*/
         if k>2 {
             table = process_grammar_rules_third_pass(&grammar, &table, &first_sets_with_production);
         }
+    }
+
+    let right_k = check_k(&table);
+    if !right_k {
+        println!("WARNING k is not enough");
     }
 
     let table_string = format_grammar_table(&table);
