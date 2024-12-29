@@ -93,10 +93,10 @@ pub fn find_k_chars(
     grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>,
     first_sets: &HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>>,
     mut visited: HashSet<Symbol>,
-) -> HashSet<char> {
+) -> HashSet<String> {
     let mut result = HashSet::new();
     if production.is_empty() {
-        result.insert('\0');
+        result.insert("".to_string());
         return result;
     }
 
@@ -107,7 +107,7 @@ pub fn find_k_chars(
     match &production[0] {
         Symbol::Terminal(c) => {
             if k == 1 {
-                result.insert(*c);
+                result.insert(c.to_string());
             } else {
                 result.extend(find_k_chars(
                     k - 1,
@@ -166,7 +166,7 @@ pub fn process_grammar_rules_second_pass(
 
             // Check if we need to differentiate these productions
             let mut need_second_char = false;
-            let mut all_second_chars: HashSet<char> = HashSet::new();
+            let mut all_second_chars: HashSet<String> = HashSet::new();
 
             for production in productions.iter() {
                 let second_chars = find_k_chars(2, production, grammar, first_sets, HashSet::new());
@@ -219,7 +219,7 @@ pub fn process_grammar_rules_third_pass(
             }
 
             let mut need_third_char = false;
-            let mut third_chars_set: HashSet<char> = HashSet::new();
+            let mut third_chars_set: HashSet<String> = HashSet::new();
 
             for production in productions.iter() {
                 let third_chars = find_k_chars(3, production, grammar, first_sets, HashSet::new());
@@ -416,7 +416,7 @@ D->d";*/
 
         input = input.trim().to_string();
 
-        if input == "exit" {
+        if input == "#" {
             break;
         }
 
