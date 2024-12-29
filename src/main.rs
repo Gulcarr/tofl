@@ -3,7 +3,7 @@ mod pda_parser;
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io;
+use std::{fmt, io};
 use std::io::Read;
 use crate::pda_parser::parse_word;
 use crate::rules_parser::{parse_grammar, Symbol};
@@ -338,6 +338,40 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     result
 }
 
+fn format_symbol(symbol: &Symbol) -> String {
+    match symbol {
+        Symbol::Terminal(c) => format!("'{}'", c),
+        Symbol::NonTerminal(s) => format!("<{}>", s),
+    }
+}
+
+pub fn format_grammar_table2(table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> String {
+    let mut result = String::new();
+
+    for (symbol, inner_map) in table {
+        result.push_str(&format!("Symbol: {}\n", format_symbol(symbol)));
+        result.push_str("-----------------------------\n");
+
+        for (key, productions) in inner_map {
+            result.push_str(&format!("  Key: {}\n", key));
+            result.push_str("  Productions:\n");
+
+            for (i, production) in productions.iter().enumerate() {
+                let production_str = production
+                    .iter()
+                    .map(format_symbol)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                result.push_str(&format!("    {}: {}\n", i + 1, production_str));
+            }
+            result.push('\n');
+        }
+        result.push_str("============================================\n");
+    }
+
+    result
+}
+
 fn check_k (table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
     for (_, rules) in table {
         for (_, productions) in rules {
@@ -408,7 +442,8 @@ D->d";*/
     println!("Beautified table:");
     println!("{}", table_string);
     println!("Full table:");
-    println!("{:?}", table);
+    let full_table = format_grammar_table2(&table);
+    println!("{}", full_table);
 
     loop {
         let mut input = String::new();
