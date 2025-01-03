@@ -284,8 +284,8 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     let mut string_headers: Vec<String> = all_strings.into_iter().collect();
     string_headers.sort();
 
-    let symbol_width = 2;
-    let column_width = 7;
+    let symbol_width = 5;
+    let column_width = 8;
 
     result.push_str(&format!("{:symbol_width$}|", "", symbol_width = symbol_width));
     for header in &string_headers {
@@ -299,19 +299,17 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     let mut symbols: Vec<_> = rules.keys().collect();
     symbols.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
 
-    for (i, symbol) in symbols.iter().enumerate() {
-        match symbol {
-            Symbol::Terminal(c) => result.push_str(&format!("{:symbol_width$}|", c, symbol_width = symbol_width)),
-            Symbol::NonTerminal(s) => result.push_str(&format!("{:symbol_width$}|", s, symbol_width = symbol_width)),
-        }
-
+    for symbol in symbols {
+        let mut first_row = true;
         let string_map = &rules[symbol];
+
+        let mut all_productions: HashMap<&String, Vec<String>> = HashMap::new();
+        let mut max_rows = 1;
+
         for header in &string_headers {
             if let Some(productions) = string_map.get(header) {
-                let production_str = if productions.is_empty() {
-                    String::new()
-                } else {
-                    let prod = &productions[0];
+                let mut header_productions = Vec::new();
+                for prod in productions {
                     let mut prod_str = match symbol {
                         Symbol::Terminal(c) => c.to_string(),
                         Symbol::NonTerminal(s) => s.clone(),
@@ -323,16 +321,49 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
                             Symbol::NonTerminal(s) => prod_str.push_str(s),
                         }
                     }
-                    prod_str
-                };
-                result.push_str(&format!("{:^column_width$}|", production_str, column_width = column_width));
-            } else {
-                result.push_str(&format!("{:column_width$}|", "", column_width = column_width));
+
+                    if prod_str.len() > column_width {
+                        let chunks = (prod_str.len() + column_width - 1) / column_width;
+                        for i in 0..chunks {
+                            let start = i * column_width;
+                            let end = (start + column_width).min(prod_str.len());
+                            let chunk = &prod_str[start..end];
+                            header_productions.push(chunk.to_string());
+                        }
+                    } else {
+                        header_productions.push(prod_str);
+                    }
+                }
+                max_rows = max_rows.max(header_productions.len());
+                all_productions.insert(header, header_productions);
             }
         }
-        if i < symbols.len() - 1 {
+
+        for row in 0..max_rows {
+            if first_row {
+                match symbol {
+                    Symbol::Terminal(c) => result.push_str(&format!("{:symbol_width$}|", c, symbol_width = symbol_width)),
+                    Symbol::NonTerminal(s) => result.push_str(&format!("{:symbol_width$}|", s, symbol_width = symbol_width)),
+                }
+                first_row = false;
+            } else {
+                result.push_str(&format!("{:symbol_width$}|", "", symbol_width = symbol_width));
+            }
+
+            for header in &string_headers {
+                let mut production = String::new();
+                if let Some(prods) = all_productions.get(header) {
+                    if let Some(prod_str) = prods.get(row) {
+                        production = prod_str.clone();
+                    }
+                }
+                result.push_str(&format!("{:^column_width$}|", production, column_width = column_width));
+            }
             result += "\n";
         }
+
+        result.push_str(&"-".repeat(symbol_width + (column_width + 1) * string_headers.len()));
+        result += "\n";
     }
 
     result
@@ -441,9 +472,9 @@ D->d";*/
     let table_string = format_grammar_table(&table);
     println!("Beautified table:");
     println!("{}", table_string);
-    println!("Full table:");
+    /*println!("Full table:");
     let full_table = format_grammar_table2(&table);
-    println!("{}", full_table);
+    println!("{}", full_table);*/
 
     loop {
         let mut input = String::new();
