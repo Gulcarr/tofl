@@ -95,8 +95,12 @@ pub fn find_k_chars(
     mut visited: HashSet<Symbol>,
 ) -> HashSet<String> {
     let mut result = HashSet::new();
+
     if production.is_empty() {
-        result.insert("".to_string());
+        if k > 0 {
+            result.insert("".to_string());
+        }
+
         return result;
     }
 
@@ -108,7 +112,7 @@ pub fn find_k_chars(
         Symbol::Terminal(c) => {
             if k == 1 {
                 result.insert(c.to_string());
-            } else {
+            } else if production.len() > 1 {
                 result.extend(find_k_chars(
                     k - 1,
                     &production[1..],
@@ -116,6 +120,8 @@ pub fn find_k_chars(
                     first_sets,
                     HashSet::new(),
                 ));
+            } else {
+                result.insert("".to_string());
             }
         }
         Symbol::NonTerminal(nt) => {
@@ -127,20 +133,15 @@ pub fn find_k_chars(
                 if let Some(prods) = grammar.get(&nt_symbol) {
                     for prod in prods {
                         let mut chars_from_prod = find_k_chars(k, prod, grammar, first_sets, visited.clone());
-                        result.extend(chars_from_prod);
+                        result.extend(chars_from_prod.clone());
+
+                        if chars_from_prod.contains("") && production.len() > 1 {
+                            let chars_from_rest = find_k_chars(k, &production[1..],
+                                grammar, first_sets, visited.clone());
+                            result.extend(chars_from_rest);
+                        }
                     }
                 }
-            }
-
-            if production.len() > 1 {
-                let chars_from_rest = find_k_chars(
-                    k - 1,
-                    &production[1..],
-                    grammar,
-                    first_sets,
-                    HashSet::new(),
-                );
-                result.extend(chars_from_rest);
             }
         }
     }
@@ -472,9 +473,9 @@ D->d";*/
     let table_string = format_grammar_table(&table);
     println!("Beautified table:");
     println!("{}", table_string);
-    /*println!("Full table:");
+    println!("Full table:");
     let full_table = format_grammar_table2(&table);
-    println!("{}", full_table);*/
+    println!("{}", full_table);
 
     loop {
         let mut input = String::new();
