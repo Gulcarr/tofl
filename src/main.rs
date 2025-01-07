@@ -285,12 +285,39 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     let mut string_headers: Vec<String> = all_strings.into_iter().collect();
     string_headers.sort();
 
-    let symbol_width = 5;
+    let symbol_width = 8;
     let column_width = 8;
 
     result.push_str(&format!("{:symbol_width$}|", "", symbol_width = symbol_width));
     for header in &string_headers {
         result.push_str(&format!("{:^column_width$}|", header, column_width = column_width));
+    }
+    result += "\n";
+
+    result.push_str(&"-".repeat(symbol_width + (column_width + 1) * string_headers.len()));
+    result += "\n";
+
+    result.push_str(&format!("{:symbol_width$}|", "[Start]", symbol_width = symbol_width));
+    for header in &string_headers {
+        let cell_content = if rules.iter().any(|(symbol, string_map)|
+                matches!(symbol, Symbol::NonTerminal(s) if s == "S")) {
+            "[Start]"
+        } else {
+            ""
+        };
+        result.push_str(&format!("{:^column_width$}|", cell_content, column_width = column_width));
+    }
+    result += "\n";
+
+    result.push_str(&format!("{:symbol_width$}|", "", symbol_width = symbol_width));
+    for header in &string_headers {
+        let cell_content = if rules.iter().any(|(symbol, string_map)|
+            matches!(symbol, Symbol::NonTerminal(s) if s == "S")) {
+            "[Start]"
+        } else {
+            ""
+        };
+        result.push_str(&format!("{:^column_width$}|", cell_content, column_width = column_width));
     }
     result += "\n";
 
@@ -473,9 +500,9 @@ D->d";*/
     let table_string = format_grammar_table(&table);
     println!("Beautified table:");
     println!("{}", table_string);
-    println!("Full table:");
+    /*println!("Full table:");
     let full_table = format_grammar_table2(&table);
-    println!("{}", full_table);
+    println!("{}", full_table);*/
 
     loop {
         let mut input = String::new();
