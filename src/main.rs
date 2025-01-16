@@ -1,12 +1,19 @@
 mod rules_parser;
 mod pda_parser;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::{fmt, io};
 use std::io::Read;
 use crate::pda_parser::parse_word;
 use crate::rules_parser::{parse_grammar, Symbol};
+
+#[derive(Debug)]
+struct ParseNode {
+    symbols: Vec<Symbol>,
+    matched: String,
+    depth: usize,
+}
 
 fn calculate_first_sets(grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>) -> HashMap<Symbol, HashSet<char>> {
     let mut first_sets: HashMap<Symbol, HashSet<char>> = HashMap::new();
@@ -47,11 +54,11 @@ fn calculate_first_sets(grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>) -> HashMap<
     first_sets
 }
 
-fn process_first_sets_with_productions(grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>, first_sets: &HashMap<Symbol, HashSet<char>>) -> HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>> {
-    let mut result: HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>> = HashMap::new();
+fn process_first_sets_with_productions(grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>, first_sets: &HashMap<Symbol, HashSet<char>>) -> HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> {
+    let mut result: HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> = HashMap::new();
 
     for (non_terminal, productions) in grammar {
-        let mut char_productions: HashMap<char, Vec<Vec<Symbol>>> = HashMap::new();
+        let mut char_productions: HashMap<String, Vec<Vec<Symbol>>> = HashMap::new();
 
         for production in productions {
             if production.is_empty() {
@@ -73,7 +80,7 @@ fn process_first_sets_with_productions(grammar: &HashMap<Symbol, Vec<Vec<Symbol>
 
             for c in first_symbols {
                 char_productions
-                    .entry(c)
+                    .entry(c.to_string())
                     .or_insert_with(Vec::new)
                     .push(production.clone());
             }
@@ -90,55 +97,66 @@ fn process_first_sets_with_productions(grammar: &HashMap<Symbol, Vec<Vec<Symbol>
 pub fn find_k_chars(
     k: usize,
     production: &[Symbol],
-    grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>,
-    first_sets: &HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>>,
-    mut visited: HashSet<Symbol>,
+    grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
 ) -> HashSet<String> {
-    let mut result = HashSet::new();
+    let mut result: HashSet<String> = HashSet::new();
+    let mut queue = VecDeque::new();
+    let mut visited = HashSet::new();
 
-    if production.is_empty() {
-        if k > 0 {
-            result.insert("".to_string());
+    queue.push_back(ParseNode {
+        symbols: Vec::from(production.clone()),
+        matched: String::new(),
+        depth: 0,
+    });
+
+    while let Some(node) = queue.pop_front() {
+        let state_key = (node.symbols.clone(), node.matched.clone());
+        if visited.contains(&state_key) {
+            continue;
         }
+        visited.insert(state_key);
 
-        return result;
-    }
-
-    if k == 0 {
-        return result;
-    }
-
-    match &production[0] {
-        Symbol::Terminal(c) => {
-            if k == 1 {
-                result.insert(c.to_string());
-            } else if production.len() > 1 {
-                result.extend(find_k_chars(
-                    k - 1,
-                    &production[1..],
-                    grammar,
-                    first_sets,
-                    HashSet::new(),
-                ));
-            } else {
+        if node.symbols.is_empty() {
+            if node.matched.len() < k {
                 result.insert("".to_string());
             }
+
+            continue;
         }
-        Symbol::NonTerminal(nt) => {
-            let nt_symbol = Symbol::NonTerminal(nt.clone());
 
-            if !visited.contains(&nt_symbol) {
-                visited.insert(nt_symbol.clone());
+        if node.depth < 10 {
+            match &node.symbols[0] {
+                Symbol::Terminal(c) => {
+                    if node.matched.len() == k - 1 {
+                        result.insert(c.to_string());
+                        continue;
+                    }
 
-                if let Some(prods) = grammar.get(&nt_symbol) {
-                    for prod in prods {
-                        let mut chars_from_prod = find_k_chars(k, prod, grammar, first_sets, visited.clone());
-                        result.extend(chars_from_prod.clone());
+                    queue.push_back(ParseNode {
+                        symbols: node.symbols[1..].to_vec(),
+                        matched: format!("{}{}", node.matched, c),
+                        depth: node.depth,
+                    });
+                },
+                Symbol::NonTerminal(nt) => {
+                    if let Some(rules) = grammar.get(&Symbol::NonTerminal(nt.clone())) {
+                        for (prefix, productions) in rules {
+                            if node.matched.len() < k {
+                                for production in productions {
+                                    let mut new_symbols = production.clone();
+                                    new_symbols.extend_from_slice(&node.symbols[1..]);
 
-                        if chars_from_prod.contains("") && production.len() > 1 {
-                            let chars_from_rest = find_k_chars(k, &production[1..],
-                                grammar, first_sets, visited.clone());
-                            result.extend(chars_from_rest);
+                                    queue.push_back(ParseNode {
+                                        symbols: new_symbols,
+                                        matched: node.matched.clone(),
+                                        depth: node.depth + 1,
+                                    });
+                                }
+                            } else {
+                                if let Some(symb) = node.matched.chars().nth(k - 1) {
+                                    result.insert(symb.to_string());
+                                }
+                            }
                         }
                     }
                 }
@@ -150,9 +168,8 @@ pub fn find_k_chars(
 }
 
 pub fn process_grammar_rules_second_pass(
-    grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>,
     rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
-    first_sets: &HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>>,
+    first_sets: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
 ) -> HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> {
     let mut processed_rules: HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> = HashMap::new();
 
@@ -170,7 +187,9 @@ pub fn process_grammar_rules_second_pass(
             let mut all_second_chars: HashSet<String> = HashSet::new();
 
             for production in productions.iter() {
-                let second_chars = find_k_chars(2, production, grammar, first_sets, HashSet::new());
+                let second_chars = find_k_chars(2, production, first_sets);
+                println!("{:?}, {:?}", production, second_chars);
+
                 if !second_chars.is_empty() && !all_second_chars.is_empty() {
                     if second_chars != all_second_chars {
                         need_second_char = true;
@@ -183,7 +202,7 @@ pub fn process_grammar_rules_second_pass(
 
             if need_second_char {
                 for production in productions {
-                    let second_chars = find_k_chars(2, production, grammar, first_sets, HashSet::new());
+                    let second_chars = find_k_chars(2, production, first_sets);
                     for second_char in second_chars {
                         let key = format!("{}{}", first_char, second_char);
                         final_rules
@@ -204,9 +223,8 @@ pub fn process_grammar_rules_second_pass(
 }
 
 pub fn process_grammar_rules_third_pass(
-    grammar: &HashMap<Symbol, Vec<Vec<Symbol>>>,
     rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
-    first_sets: &HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>>,
+    first_sets: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
 ) -> HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> {
     let mut processed_rules: HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> = HashMap::new();
 
@@ -223,7 +241,7 @@ pub fn process_grammar_rules_third_pass(
             let mut third_chars_set: HashSet<String> = HashSet::new();
 
             for production in productions.iter() {
-                let third_chars = find_k_chars(3, production, grammar, first_sets, HashSet::new());
+                let third_chars = find_k_chars(3, production, first_sets);
                 if !third_chars.is_empty() && !third_chars_set.is_empty() {
                     if third_chars != third_chars_set {
                         need_third_char = true;
@@ -235,7 +253,7 @@ pub fn process_grammar_rules_third_pass(
 
             if need_third_char {
                 for production in productions {
-                    let third_chars = find_k_chars(3, production, grammar, first_sets, HashSet::new());
+                    let third_chars = find_k_chars(3, production, first_sets);
                     for third_char in third_chars {
                         let key = format!("{}{}", prefix, third_char);
                         final_rules
@@ -256,8 +274,7 @@ pub fn process_grammar_rules_third_pass(
 }
 
 pub fn process_grammar_rules(
-    grammar: HashMap<Symbol, Vec<Vec<Symbol>>>,
-    first_sets: &HashMap<Symbol, HashMap<char, Vec<Vec<Symbol>>>>,
+    first_sets: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>,
 ) -> HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> {
     let mut result: HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>> = HashMap::new();
 
@@ -297,11 +314,18 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
     result.push_str(&"-".repeat(symbol_width + (column_width + 1) * string_headers.len()));
     result += "\n";
 
+    let s_rules = rules.iter()
+        .find(|(symbol, _)| matches!(symbol, Symbol::NonTerminal(s) if s == "S"))
+        .map(|(_, string_map)| string_map);
+
     result.push_str(&format!("{:symbol_width$}|", "[Start]", symbol_width = symbol_width));
     for header in &string_headers {
-        let cell_content = if rules.iter().any(|(symbol, string_map)|
-                matches!(symbol, Symbol::NonTerminal(s) if s == "S")) {
-            "[Start]"
+        let cell_content = if let Some(s_map) = s_rules {
+            if s_map.contains_key(header) {
+                "[Start]"
+            } else {
+                ""
+            }
         } else {
             ""
         };
@@ -311,9 +335,12 @@ pub fn format_grammar_table(rules: &HashMap<Symbol, HashMap<String, Vec<Vec<Symb
 
     result.push_str(&format!("{:symbol_width$}|", "", symbol_width = symbol_width));
     for header in &string_headers {
-        let cell_content = if rules.iter().any(|(symbol, string_map)|
-            matches!(symbol, Symbol::NonTerminal(s) if s == "S")) {
-            "[Start]"
+        let cell_content = if let Some(s_map) = s_rules {
+            if s_map.contains_key(header) {
+                "->S#"
+            } else {
+                ""
+            }
         } else {
             ""
         };
@@ -431,7 +458,7 @@ pub fn format_grammar_table2(table: &HashMap<Symbol, HashMap<String, Vec<Vec<Sym
     result
 }
 
-fn check_k (table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
+fn check_k(table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
     for (_, rules) in table {
         for (_, productions) in rules {
             if productions.len() > 1 {
@@ -443,7 +470,7 @@ fn check_k (table: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool 
     true
 }
 
-fn main() -> Result<(),String> {
+fn main() -> Result<(), String> {
     let mut input = String::new();
     io::stdin().read_line(&mut input).expect("can't read a k");
 
@@ -460,19 +487,19 @@ fn main() -> Result<(),String> {
     file.read_to_string(&mut grammar_text)
         .map_err(|e| format!("Failed to read input file grammar_description: {}", e))?;
 
-   /*let grammar_text = "S-> aB
-S-> aC
-S-> bE
-S-> bD
-B->bK
-B->F
-F->pp
-C->bL
-K->k
-K->t
-L->l
-E->e
-D->d";*/
+    /*let grammar_text = "S-> aB
+ S-> aC
+ S-> bE
+ S-> bD
+ B->bK
+ B->F
+ F->pp
+ C->bL
+ K->k
+ K->t
+ L->l
+ E->e
+ D->d";*/
     //let grammar_text = "S->SaS\n S->b \n S->a";
     //let grammar_text = "S->aA\n A->bB\n B->D\n D->p\n D->o";
     //let grammar_text = "S->aS";
@@ -484,11 +511,11 @@ D->d";*/
     let first_sets = calculate_first_sets(&grammar.clone());
     let first_sets_with_production = process_first_sets_with_productions(&grammar, &first_sets);
 
-    let mut table = process_grammar_rules(grammar.clone(), &first_sets_with_production);
-    if k>1 {
-        table = process_grammar_rules_second_pass(&grammar, &table, &first_sets_with_production);
-        if k>2 {
-            table = process_grammar_rules_third_pass(&grammar, &table, &first_sets_with_production);
+    let mut table = process_grammar_rules(&first_sets_with_production);
+    if k > 1 {
+        table = process_grammar_rules_second_pass(&table, &first_sets_with_production);
+        if k > 2 {
+            table = process_grammar_rules_third_pass(&table, &first_sets_with_production);
         }
     }
 

@@ -1,13 +1,3 @@
-S-> aB
-S-> aC
-S-> bE
-S-> bD
-B->bK
-B->F
-F->pp
-C->bL
-K->k
-K->t
-L->l
-E->e
-D->d
+S -> S b S
+S -> S b b S
+S -> a

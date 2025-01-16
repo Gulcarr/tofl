@@ -6,8 +6,7 @@ use crate::rules_parser::Symbol;
 struct ParseNode {
     symbols: Vec<Symbol>,
     matched: String,
-    remaining: String,
-    depth: usize,
+    remaining: String
 }
 
 pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<Symbol>>>>) -> bool {
@@ -19,7 +18,6 @@ pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<
          symbols: vec![start_symbol],
          matched: String::new(),
          remaining: word.to_string(),
-         depth: 0,
      });
 
     while let Some(node) = queue.pop_front() {
@@ -37,7 +35,7 @@ pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<
             continue;
         }
 
-        if node.depth < 17 {
+        if node.symbols.len() < node.remaining.len() {
             match &node.symbols[0] {
                 Symbol::Terminal(c) => {
                     if let Some(next_char) = node.remaining.chars().next() {
@@ -46,7 +44,6 @@ pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<
                                 symbols: node.symbols[1..].to_vec(),
                                 matched: format!("{}{}", node.matched, next_char),
                                 remaining: node.remaining[1..].to_string(),
-                                depth: node.depth,
                             });
                         }
                     }
@@ -63,7 +60,6 @@ pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<
                                         symbols: new_symbols,
                                         matched: node.matched.clone(),
                                         remaining: node.remaining.clone(),
-                                        depth: node.depth + 1,
                                     });
                                 }
                             }
@@ -73,5 +69,6 @@ pub fn parse_word(word: &str, grammar: &HashMap<Symbol, HashMap<String, Vec<Vec<
             }
         }
     }
+
     false
 }
